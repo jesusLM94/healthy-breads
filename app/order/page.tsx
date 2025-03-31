@@ -15,7 +15,7 @@ import Image from "next/image";
 
 interface OrderItem {
   id: string;
-  quantity: number;
+  quantity?: number | null;
 }
 
 interface CustomerDetails {
@@ -43,23 +43,33 @@ export default function OrderPage() {
     }
   }, []);
 
-  const handleQuantityChange = (id: string, quantity: number) => {
+  const handleQuantityChange = (id: string, quantity: number | undefined) => {
+    // Si la cantidad es negativa, establecerla en 0
+    let validQuantity = quantity;
+    if (typeof quantity === 'number' && quantity < 0) {
+      validQuantity = 0;
+    }
+    
     setSelectedItems((prev) =>
       prev.map((item) =>
-        item.id === id ? { ...item, quantity } : item
+        item.id === id ? { ...item, quantity: validQuantity } : item
       )
     );
   };
 
   const handleCheckboxChange = (id: string, checked: boolean) => {
     if (checked) {
-      setSelectedItems((prev) => [...prev, { id, quantity: 1 }]);
+      // Cuando se marca un checkbox, inicializar con un input vacío (undefined)
+      setSelectedItems((prev) => [...prev, { id, quantity: undefined }]);
     } else {
       setSelectedItems((prev) => prev.filter((item) => item.id !== id));
     }
   };
 
   const totalAmount = selectedItems.reduce((total, item) => {
+    // Si la cantidad es undefined o 0, no sumamos nada al total
+    if (!item.quantity) return total;
+    
     const product = products.find((p) => p.id === item.id);
     return total + (product?.price || 0) * item.quantity;
   }, 0);
@@ -69,62 +79,40 @@ export default function OrderPage() {
     if (step === 1) {
       setStep(2);
     } else {
-      //call api to send email
-      const response = await fetch('/api/send', {
-        method: 'POST',
-        body: JSON.stringify({
-          items: selectedItems,
-          customerDetails,
-          totalAmount,
-        }),
-      });
       setIsSubmitting(true);
       try {
-        /* Commented for now
-        const orderItems = selectedItems.map(item => {
-          const product = products.find(p => p.id === item.id)!;
-          return {
-            ...item,
-            name: product.name,
-            price: product.price
-          };
-        });
-
-        const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-order-email`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
-          },
-          body: JSON.stringify({
-            items: orderItems,
-            customerDetails,
-            totalAmount,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Error al enviar el pedido');
+        // Filtrar productos con cantidad mayor a 0
+        const validItems = selectedItems.filter(item => item.quantity && item.quantity > 0);
+        
+        // Si no hay productos válidos, mostrar error
+        if (validItems.length === 0) {
+          alert("Por favor selecciona al menos un producto con cantidad mayor a 0");
+          setIsSubmitting(false);
+          return;
         }
-        */
-
-        // Save order to localStorage for admin panel
-        const orderItems = selectedItems.map(item => {
+        
+        const orderItems = validItems.map(item => {
           const product = products.find(p => p.id === item.id)!;
           return {
             id: item.id,
             name: product.name,
-            quantity: item.quantity,
+            quantity: item.quantity || 0,
             price: product.price
           };
         });
+
+        // Recalcular el monto total usando solo los items válidos
+        const validTotalAmount = validItems.reduce((total, item) => {
+          const product = products.find((p) => p.id === item.id);
+          return total + (product?.price || 0) * (item.quantity || 0);
+        }, 0);
 
         const newOrder = {
           id: Date.now().toString(),
           date: new Date().toISOString(),
           items: orderItems,
           customerDetails,
-          totalAmount
+          totalAmount: validTotalAmount
         };
 
         const existingOrders = JSON.parse(localStorage.getItem('orders') || '[]');
@@ -133,10 +121,10 @@ export default function OrderPage() {
         // Actualizar el inventario (descontar de stock)
         let updatedProductsList = [...products];
         
-        for (const item of selectedItems) {
+        for (const item of validItems) {
           const product = products.find(p => p.id === item.id);
           if (product) {
-            const newStock = Math.max(0, product.stock - item.quantity);
+            const newStock = Math.max(0, product.stock - (item.quantity || 0));
             updatedProductsList = updateProductStock(item.id, newStock, updatedProductsList);
           }
         }
@@ -195,16 +183,20 @@ export default function OrderPage() {
                         <Input
                           id={`quantity-${product.id}`}
                           type="number"
-                          min="1"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          min="0"
                           max={product.stock}
                           value={
                             selectedItems.find((item) => item.id === product.id)
-                              ?.quantity || 1
+                              ?.quantity === undefined ? '' : 
+                              selectedItems.find((item) => item.id === product.id)
+                              ?.quantity || ''
                           }
                           onChange={(e) =>
                             handleQuantityChange(
                               product.id,
-                              parseInt(e.target.value) || 0
+                              e.target.value === '' ? undefined : parseInt(e.target.value)
                             )
                           }
                         />
@@ -221,7 +213,7 @@ export default function OrderPage() {
               </p>
               <Button
                 type="submit"
-                disabled={selectedItems.length === 0}
+                disabled={!selectedItems.some(item => item.quantity && item.quantity > 0)}
               >
                 Continuar a Detalles de Entrega
               </Button>
@@ -249,6 +241,8 @@ export default function OrderPage() {
                 <Input
                   id="phone"
                   type="tel"
+                  inputMode="tel"
+                  pattern="[0-9]*"
                   required
                   value={customerDetails.phone}
                   onChange={(e) =>
