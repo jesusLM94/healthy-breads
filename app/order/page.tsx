@@ -1,7 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { products } from "@/lib/products";
+import { useState, useEffect } from "react";
+import { 
+  products as initialProducts, 
+  loadProductsFromLocalStorage, 
+  updateProductStock
+} from "@/lib/products";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -29,6 +33,15 @@ export default function OrderPage() {
     address: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [products, setProducts] = useState(initialProducts);
+
+  // Load products from localStorage to stay in sync with admin panel updates
+  useEffect(() => {
+    const storedProducts = loadProductsFromLocalStorage();
+    if (storedProducts) {
+      setProducts(storedProducts);
+    }
+  }, []);
 
   const handleQuantityChange = (id: string, quantity: number) => {
     setSelectedItems((prev) =>
@@ -65,7 +78,6 @@ export default function OrderPage() {
           totalAmount,
         }),
       });
-      console.log(response);
       setIsSubmitting(true);
       try {
         /* Commented for now
@@ -95,6 +107,42 @@ export default function OrderPage() {
           throw new Error('Error al enviar el pedido');
         }
         */
+
+        // Save order to localStorage for admin panel
+        const orderItems = selectedItems.map(item => {
+          const product = products.find(p => p.id === item.id)!;
+          return {
+            id: item.id,
+            name: product.name,
+            quantity: item.quantity,
+            price: product.price
+          };
+        });
+
+        const newOrder = {
+          id: Date.now().toString(),
+          date: new Date().toISOString(),
+          items: orderItems,
+          customerDetails,
+          totalAmount
+        };
+
+        const existingOrders = JSON.parse(localStorage.getItem('orders') || '[]');
+        localStorage.setItem('orders', JSON.stringify([...existingOrders, newOrder]));
+
+        // Actualizar el inventario (descontar de stock)
+        let updatedProductsList = [...products];
+        
+        for (const item of selectedItems) {
+          const product = products.find(p => p.id === item.id);
+          if (product) {
+            const newStock = Math.max(0, product.stock - item.quantity);
+            updatedProductsList = updateProductStock(item.id, newStock, updatedProductsList);
+          }
+        }
+        
+        // Actualizar el estado local
+        setProducts(updatedProductsList);
 
         alert("¡Pedido enviado exitosamente!");
         // Reset form

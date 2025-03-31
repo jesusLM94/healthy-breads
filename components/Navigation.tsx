@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Heading as Bread } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function Navigation() {
   const pathname = usePathname();
