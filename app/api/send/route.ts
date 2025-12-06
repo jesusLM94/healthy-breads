@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { EmailTemplate } from '@/components/email-template';
 import { Resend } from 'resend';
 
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
       react: EmailTemplate({ 
         firstName: customerDetails.name,
         orderDetails: { items, customerDetails, totalAmount }
-      }),
+      }) as React.ReactElement,
     });
 
     if (error) {

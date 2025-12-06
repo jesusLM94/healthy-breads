@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Este middleware es básico y solo se usa para redireccionar
+// Este proxy es básico y solo se usa para redireccionar
 // a usuarios que intentan acceder directamente a /admin
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   // Solo protege la ruta /admin exacta, no /admin/login
   if (request.nextUrl.pathname === '/admin') {
     // En producción, deberías usar cookies seguras con httpOnly
@@ -19,4 +19,5 @@ export function middleware(request: NextRequest) {
 // Configurar para que solo se aplique a la ruta /admin
 export const config = {
   matcher: ['/admin'],
-}; 
+};
+
